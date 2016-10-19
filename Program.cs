@@ -26,6 +26,15 @@
                 //});
                 //return;
 
+                // NOTE: PLEASE NOTE THAT OUR SYNC JOB NEEDS TO RUN BEFORE THIS PROGRAM IS CALLED!
+
+                var folderBoard = gitFolder + "brfskagagard-styrelsen" + Path.DirectorySeparatorChar;
+                var folderBoardExists = Directory.Exists(folderBoard);
+
+                var apartments = GetApartments(gitFolder);
+
+                Console.WriteLine(apartments.Count);
+
                 var driverLocation = System.AppContext.BaseDirectory + "binaries" + Path.DirectorySeparatorChar;
 
                 LoginInfo login = ReadSettings(gitFolder);
@@ -38,34 +47,78 @@
 
                     var list = GetEmails(driver);
 
-                    foreach (var item in list)
+                    foreach (var apartment in apartments)
                     {
-                        Console.WriteLine(item);
-                    }
+                        var emails = apartment.Owners.Select(o => o.Email).Where(e => !string.IsNullOrEmpty(e)).ToList();
+                        var forwardsToRemove = new List<string>();
 
-                    var emailInfo = list.FirstOrDefault(i => i.Email == "661@brfskagagard.se");
-                    if (emailInfo != null)
-                    {
-                        var emailToAdd = "webmaster@brfskagagard.se";
-                        AddForwardEmail(driver, emailInfo, emailToAdd);
-                        foreach (var forward in emailInfo.ForwardAddresses)
+                        var email = apartment.Number + "@brfskagagard.se";
+                        var emailInfo = list.FirstOrDefault(i => i.Email == email);
+                        if (emailInfo != null)
                         {
-                            var isEmailWeWantToAdd = (forward == emailToAdd);
-                            if (!isEmailWeWantToAdd)
+                            // temporarly store emails we should not forward to anymore
+                            var forwards = new List<string>(emailInfo.ForwardAddresses);
+                            foreach (var forward in forwards)
                             {
-                                RemoveForwardEmail(driver, emailInfo, forward);
+                                if (emails.Contains(forward))
+                                {
+                                    emails.Remove(forward);
+                                }
+                                else
+                                {
+                                    forwardsToRemove.Add(forward);
+                                }
                             }
+
+                            // add emails that was not already present
+                            if (emails.Count > 0)
+                            {
+                                foreach (var item in emails)
+                                {
+                                    AddForwardEmail(driver, emailInfo, item);
+                                }
+                            }
+
+                            // do the actuall removal of email(s)
+                            foreach (var item in forwardsToRemove)
+                            {
+                                RemoveForwardEmail(driver, emailInfo, item);
+                            }
+
                         }
                     }
-
-                    Console.WriteLine(driver.Url);
                 }
             }
             catch (System.Exception e)
             {
-
+                throw;
             }
         }
+
+        private static List<Apartment> GetApartments(string gitFolder)
+        {
+            var apartments = new List<Apartment>();
+            var folders = Directory.GetDirectories(gitFolder, "brfskagagard-lgh*");
+            var json = new DataContractJsonSerializer(typeof(Apartment));
+            foreach (string folder in folders)
+            {
+                using (
+                    var stream =
+                        File.OpenRead(folder + Path.DirectorySeparatorChar + "apartment.json"))
+                {
+                    stream.Position = 0;
+                    var apartment = json.ReadObject(stream) as Apartment;
+                    if (apartment == null)
+                    {
+                        continue;
+                    }
+
+                    apartments.Add(apartment);
+                }
+            }
+            return apartments;
+        }
+
 
         private static void RemoveForwardEmail(OpenQA.Selenium.PhantomJS.PhantomJSDriver driver, EmailInfo emailInfo, string forwardEmail)
         {
@@ -81,6 +134,7 @@
 
                     var submitBtn = driver.FindElementByCssSelector(".buttons input[type=submit].arrow-right");
                     submitBtn.Click();
+                    return;
                 }
             }
         }
