@@ -79,6 +79,13 @@
                                 }
                             }
 
+                            // 
+                            var emailsLeft = (emailInfo.ForwardAddresses.Count + emails.Count) - forwardsToRemove.Count;
+                            if (emailsLeft <= 0)
+                            {
+                                AddForwardEmail(driver, emailInfo, "boende-epost-saknas@brfskagagard.se");
+                            }
+
                             // do the actuall removal of email(s)
                             foreach (var item in forwardsToRemove)
                             {
